@@ -1,0 +1,115 @@
+.TH JVMDUMP 1 "2026-10-28" "jvmdump 1.0.0" "User Commands"
+.SH NAME
+jvmdump \- dump class files from a live HotSpot JVM
+.SH SYNOPSIS
+.B jvmdump
+[\fIOPTIONS\fR] \fIPID\fR
+.SH DESCRIPTION
+.B jvmdump
+attaches to a running HotSpot JVM through its dynamic attach socket, loads a
+small JVMTI agent and writes every class file that is currently loaded to a
+directory.  No Java agent, no JDK and no helper JVM are required.
+.PP
+Loaded classes are enumerated with \fBGetLoadedClasses\fR and their bytes are
+obtained with \fBRetransformClasses\fR and a \fBClassFileLoadHook\fR callback.
+The class file data is never modified, so the target application is not
+redefined.
+.SH OPTIONS
+.TP
+.BR \-o ", " \-\-out " " \fIDIR\fR
+Output directory.  Defaults to
+\fIjvmdump\-<pid>\-<timestamp>\fR in the current directory, or in
+\fI/tmp\fR when root dumps another user's JVM.
+.TP
+.BR \-i ", " \-\-include " " \fIGLOB\fR
+Only dump classes whose dotted name matches \fIGLOB\fR.  The patterns
+.B *
+and
+.B ?
+are supported.  May be repeated or given comma separated.
+.TP
+.BR \-e ", " \-\-exclude " " \fIGLOB\fR
+Skip classes matching \fIGLOB\fR.  May be repeated.
+.TP
+.B \-\-no\-jdk
+Exclude \fIjava.*\fR, \fIjavax.*\fR, \fIjdk.*\fR, \fIsun.*\fR, \fIcom.sun.*\fR,
+\fIorg.w3c.*\fR and \fIorg.xml.*\fR.
+.TP
+.BR \-l ", " \-\-list
+Only list class names in \fI<out>/classes.txt\fR; do not write class files.
+.TP
+.BR \-f ", " \-\-flat
+Write \fIcom.example.Foo.class\fR instead of \fIcom/example/Foo.class\fR.
+.TP
+.BR \-a ", " \-\-agent " " \fIPATH\fR
+Path to \fIlibjvmdump.so\fR.  By default it is looked up next to the binary and
+in the installation directory.
+.TP
+.BR \-\-timeout " " \fISECONDS\fR
+How long to wait for the JVM to open its attach socket (default 10).
+.TP
+.BR \-q ", " \-\-quiet
+Print only the output path.
+.TP
+.BR \-v ", " \-\-verbose
+Print the complete agent report.
+.TP
+.BR \-V ", " \-\-version
+Print the version and exit.
+.TP
+.BR \-h ", " \-\-help
+Print usage information and exit.
+.SH OUTPUT
+.TP
+.I <out>/classes/
+One \fI.class\fR file per loaded class.
+.TP
+.I <out>/manifest.tsv
+Tab separated list of class name, size and relative file name.
+.TP
+.I <out>/failed.txt
+Classes that JVMTI refused to retransform (usually hidden classes).
+.TP
+.I <out>/dump.log
+Report written by the agent.  Contains \fIstatus: ok\fR on success.
+.TP
+.I <out>/classes.txt
+Written in list mode.
+.SH EXAMPLES
+.TP
+.B jvmdump 1234
+Dump every loaded class of process 1234 into a timestamped directory.
+.TP
+.B jvmdump \-\-no\-jdk \-o /tmp/dump 1234
+Dump only application classes into \fI/tmp/dump\fR.
+.TP
+.B jvmdump \-l 1234 | grep Controller
+List the loaded class names and filter them.
+.SH EXIT STATUS
+0 on success, 1 on error, 2 on invalid usage.
+.SH NOTES
+HotSpot only accepts attach requests from the JVM's own user.  When run as
+root, \fBjvmdump\fR switches its effective uid/gid to the target process, and
+the output directory must be writable by that user.
+.PP
+Hidden classes (lambdas and other runtime generated classes) are not
+modifiable and cannot be retransformed; they are reported in
+\fIfailed.txt\fR.
+.PP
+On recent JDKs the target JVM may need
+\fI\-XX:+EnableDynamicAgentLoading\fR.  The agent can also be preloaded with
+\fI\-agentpath:/usr/local/lib/jvmdump/libjvmdump.so=out=/tmp/dump,delay=10\fR;
+\fIdelay=N\fR postpones the dump by N seconds after VM initialization.
+.PP
+JDK 21 and later print
+\fIWARNING: A JVMTI agent has been loaded dynamically\fR to the target's
+standard error.  HotSpot emits that message after opening the agent library
+but before any agent code runs, so \fBjvmdump\fR redirects the target's
+standard error to \fI/dev/null\fR for the few microseconds in between and
+restores it at the start of \fIAgent_OnAttach\fR.  The warning therefore never
+reaches the application's console and the application's own logging is not
+affected.  The redirection is only used when the attach listener loads the
+library; preloading with \fI\-agentpath\fR does not touch the descriptor.
+.SH SEE ALSO
+.BR javap (1),
+.BR jcmd (1)
